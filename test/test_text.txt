@@ -11,5 +11,6 @@
 11. Arabic(2): أنا قادر على أكل الزجاج و هذا لا يؤلمني.
 12. Thai: ฉันกินกระจกได้ แต่มันไม่ทำให้ฉันเจ็บ 
 13. Random Egyptian hieroglyphs: 𓀌 𓀹 𓁚 𓁭
+14. Kerning test: VAVAVAVAVA
 
 text examples from Frank da Cruz's sampler: http://kermitproject.org/utf8.html

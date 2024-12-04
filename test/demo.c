@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdint.h>
+#include <stdbool.h>
 #include <inttypes.h>
 #include <sys/mman.h>
 
@@ -88,9 +89,13 @@ static void overlay_glyph_to_frame_buffer(SFT_Image* fb, const SFT_Image* glyph,
  * @param y 
  * @return int 
  */
-static int add_glyph(SFT_Image* fb, const SFT *sft, SFT_UChar cp, int* px, int y)
+static int add_glyph(SFT_Image* fb, const SFT *sft, SFT_UChar cp, int* px, int y, bool do_kerning)
 {
 #define ABORT(cp, m) do { fprintf(stderr, "codepoint 0x%04"PRIx32" %s\n", cp, m); return -1; } while (0)
+
+	/** For demo only. DO NOT do this in production. */
+	static SFT_Glyph prev_gid = 0;
+	static bool prev_gid_valid = false;
 
 	/** Render glyph */
 	SFT_Glyph gid;
@@ -110,11 +115,26 @@ static int add_glyph(SFT_Image* fb, const SFT *sft, SFT_UChar cp, int* px, int y
 	if (sft_render(sft, gid, img) < 0)
 		ABORT(cp, "not rendered");
 
+	/** Do kerning if asked and able to */
+	SFT_Kerning kerning = {
+		.xShift = 0,
+		.yShift = 0,
+	};
+	if (do_kerning && prev_gid_valid)
+	{
+		if (sft_kerning(sft, prev_gid, gid, &kerning) < 0)
+			ABORT(cp, "kerning failed");	
+	}
+
 	/** Overlay to frame buffer. */
-	overlay_glyph_to_frame_buffer(fb, &img, *px + (int)mtx.leftSideBearing, y + (int)mtx.yOffset);
+	overlay_glyph_to_frame_buffer(fb, &img, *px + (int)(mtx.leftSideBearing + kerning.xShift), y + (int)(mtx.yOffset + kerning.yShift));
 
 	/** Update *px. y should be managed by the caller */
-	*px += (int)mtx.advanceWidth;
+	*px += (int)(mtx.advanceWidth + kerning.xShift);
+
+	/** Update previous gid */
+	prev_gid = gid;
+	prev_gid_valid = true;
 
 	return 0;
 
@@ -170,7 +190,7 @@ int main()
 
 		int x = 20;
 		for (int i = 0; i < n; i++) {
-			add_glyph(&fb, &sft, codepoints[i], &x, y);
+			add_glyph(&fb, &sft, codepoints[i], &x, y, i!=0);
 		}
 
 		y += 2 * (int)(lmtx.ascender + lmtx.descender + lmtx.lineGap);
