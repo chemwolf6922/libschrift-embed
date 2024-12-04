@@ -1,9 +1,11 @@
 *.o
+*.ppm
 libschrift.a
 /demo
 /stress
 schrift-*.tar.gz
 
+*.pc
 .vs/
 *.vcxproj.user
 Debug/

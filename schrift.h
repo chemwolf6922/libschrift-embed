@@ -69,9 +69,9 @@ struct SFT_Kerning
 
 struct SFT_Image
 {
-	void *pixels;
-	int   width;
-	int   height;
+	uint8_t *pixels;
+	int      width;
+	int      height;
 };
 
 const char *sft_version(void);
