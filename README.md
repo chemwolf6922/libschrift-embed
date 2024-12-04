@@ -1,7 +1,7 @@
 # libschrift-embed
 This is a fork of [libschrift](https://github.com/tomolt/libschrift). 
 
-Check out the original [readme](./README_ORIGINAL.md). Note that some aspects of the original readme do not apply anymore.
+Check out the original [readme](./doc/README_ORIGINAL.md). Note that some aspects of the original readme do not apply anymore.
 
 ## Embedded system specific changes
 * 
