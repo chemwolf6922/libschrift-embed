@@ -256,6 +256,7 @@ sft_lmetrics(const SFT *sft, SFT_LMetrics *metrics)
 	return 0;
 }
 
+
 int
 sft_lookup(const SFT *sft, SFT_UChar codepoint, SFT_Glyph *glyph)
 {

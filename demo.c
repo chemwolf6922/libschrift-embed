@@ -11,9 +11,45 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdint.h>
+#include <inttypes.h>
 
-#include "util/utf8_to_utf32.h"
 #include "schrift.h"
+
+static int utf8_to_utf32(const uint8_t *utf8, uint32_t *utf32, int max)
+{
+	unsigned int c;
+	int i = 0;
+	--max;
+	while (*utf8) {
+		if (i >= max)
+			return 0;
+		if (!(*utf8 & 0x80U)) {
+			utf32[i++] = *utf8++;
+		} else if ((*utf8 & 0xe0U) == 0xc0U) {
+			c = (*utf8++ & 0x1fU) << 6;
+			if ((*utf8 & 0xc0U) != 0x80U) return 0;
+			utf32[i++] = c + (*utf8++ & 0x3fU);
+		} else if ((*utf8 & 0xf0U) == 0xe0U) {
+			c = (*utf8++ & 0x0fU) << 12;
+			if ((*utf8 & 0xc0U) != 0x80U) return 0;
+			c += (*utf8++ & 0x3fU) << 6;
+			if ((*utf8 & 0xc0U) != 0x80U) return 0;
+			utf32[i++] = c + (*utf8++ & 0x3fU);
+		} else if ((*utf8 & 0xf8U) == 0xf0U) {
+			c = (*utf8++ & 0x07U) << 18;
+			if ((*utf8 & 0xc0U) != 0x80U) return 0;
+			c += (*utf8++ & 0x3fU) << 12;
+			if ((*utf8 & 0xc0U) != 0x80U) return 0;
+			c += (*utf8++ & 0x3fU) << 6;
+			if ((*utf8 & 0xc0U) != 0x80U) return 0;
+			c += (*utf8++ & 0x3fU);
+			if ((c & 0xFFFFF800U) == 0xD800U) return 0;
+            utf32[i++] = c;
+		} else return 0;
+	}
+	utf32[i] = 0;
+	return i;
+}
 
 /**
  * @brief Copy glyph to frame buffer. Blank pixels are ignored.
@@ -50,9 +86,9 @@ static void overlay_glyph_to_frame_buffer(SFT_Image* fb, const SFT_Image* glyph,
  * @param y 
  * @return int 
  */
-static int add_glyph(SFT_Image* fb, const SFT *sft, unsigned long cp, int* px, int y)
+static int add_glyph(SFT_Image* fb, const SFT *sft, SFT_UChar cp, int* px, int y)
 {
-#define ABORT(cp, m) do { fprintf(stderr, "codepoint 0x%04lX %s\n", cp, m); return -1; } while (0)
+#define ABORT(cp, m) do { fprintf(stderr, "codepoint 0x%04"PRIx32" %s\n", cp, m); return -1; } while (0)
 
 	/** Render glyph */
 	SFT_Glyph gid;
@@ -96,7 +132,7 @@ int main()
 		.height = FB_HEIGHT,
 		.pixels = fb_pixels
 	};
-	memset(fb.pixels, 0, fb.width * fb.height);
+	memset(fb.pixels, 0, FB_HEIGHT * FB_WIDTH);
 
 	SFT sft = {
 		.xScale = 32,
@@ -107,14 +143,14 @@ int main()
 	if (sft.font == NULL)
 		END("TTF load failed");
 
-	FILE *text_file = fopen("resources/glass.utf8", "r");
+	FILE *text_file = fopen("resources/test_text.txt", "r");
 	if (text_file == NULL)
 		END("Cannot open input text");
 
 	SFT_LMetrics lmtx;
 	sft_lmetrics(&sft, &lmtx);
 
-	int y = 20 + lmtx.ascender + lmtx.lineGap;
+	int y = 20 + (int)(lmtx.ascender + lmtx.lineGap);
 	char line[256] = {0};
 	while (fgets(line, sizeof(line), text_file)) {
 		if(line[strlen(line) - 1] == '\n')
@@ -122,15 +158,15 @@ int main()
 			line[strlen(line) - 1] = '\0';
 		}
 
-		uint32_t codepoints[sizeof(line)] = {0};
+		SFT_UChar codepoints[sizeof(line)] = {0};
 		int n = utf8_to_utf32((unsigned char *) line, codepoints, sizeof(codepoints)/sizeof(codepoints[0]));
 
-		int x = 0;
+		int x = 20;
 		for (int i = 0; i < n; i++) {
 			add_glyph(&fb, &sft, codepoints[i], &x, y);
 		}
 
-		y += 2 * (lmtx.ascender + lmtx.descender + lmtx.lineGap);
+		y += 2 * (int)(lmtx.ascender + lmtx.descender + lmtx.lineGap);
 	}
 
 	fclose(text_file);

@@ -70,8 +70,8 @@ struct SFT_Kerning
 struct SFT_Image
 {
 	uint8_t *pixels;
-	int      width;
-	int      height;
+	int width;
+	int height;
 };
 
 const char *sft_version(void);
