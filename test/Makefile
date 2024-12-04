@@ -11,10 +11,10 @@ override CFLAGS+=-std=c99 -pedantic -Wall -Wextra -Wconversion -MMD -MP
 LIB=../libschrift.a
 
 DEMO=demo
-DEMO_SRC=demo.c
+DEMO_SRC=demo.c util.c
 
 STRESS=stress
-STRESS_SRC=stress.c
+STRESS_SRC=stress.c util.c
 
 .PHONY: all clean
 

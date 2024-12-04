@@ -12,8 +12,10 @@
 #include <string.h>
 #include <stdint.h>
 #include <inttypes.h>
+#include <sys/mman.h>
 
 #include "../schrift.h"
+#include "util.h"
 
 static int utf8_to_utf32(const uint8_t *utf8, uint32_t *utf32, int max)
 {
@@ -134,12 +136,17 @@ int main()
 	};
 	memset(fb.pixels, 0, FB_HEIGHT * FB_WIDTH);
 
+	size_t font_data_size = 0;
+	void* font_data = map_file("./FiraGO-Regular_extended_with_NotoSansEgyptianHieroglyphs-Regular.ttf", &font_data_size);
+	if (font_data == NULL)
+		END("Cannot map font file");
+
 	SFT sft = {
 		.xScale = 32,
 		.yScale = 32,
 		.flags  = SFT_DOWNWARD_Y,
 	};
-	sft.font = sft_loadfile("./FiraGO-Regular_extended_with_NotoSansEgyptianHieroglyphs-Regular.ttf");
+	sft.font = sft_loadmem(font_data, font_data_size);
 	if (sft.font == NULL)
 		END("TTF load failed");
 
@@ -172,6 +179,7 @@ int main()
 	fclose(text_file);
 
 	sft_freefont(sft.font);
+	unmap_file(font_data, font_data_size);
 
 	/** Inverse fb */
 	for (int i = 0; i < fb.height * fb.width; i++) {

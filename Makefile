@@ -28,7 +28,7 @@ $(LIB): $(LIB_SRC:.c=.o)
 	$(RANLIB) $@
 
 %.o:%.c
-	$(CC) -c $(CFLAGS) -o $@ $<
+	$(CC) -c $(CFLAGS) -DSCHRIFT_VERSION="\"$(VERSION)\"" -o $@ $<
 
 -include $(LIB_SRC:.c=.d)
 

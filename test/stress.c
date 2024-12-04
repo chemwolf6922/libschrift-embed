@@ -11,6 +11,7 @@
 #include <string.h>
 
 #include "../schrift.h"
+#include "util.h"
 
 #define ABORT(msg) do { fprintf(stderr, "%s\n", msg); exit(1); } while (0)
 
@@ -35,8 +36,13 @@ main(int argc, char *argv[])
 		}
 	}
 
+	size_t font_data_size = 0;
+	void* font_data = map_file(font_file, &font_data_size);
+	if (font_data == NULL)
+		ABORT("Cannot map font file");
+
 	SFT_Font *font;
-	if (!(font = sft_loadfile(font_file)))
+	if (!(font = sft_loadmem(font_data, font_data_size)))
 		ABORT("Can't load font file.");
 	
 	SFT sft;
@@ -63,6 +69,7 @@ main(int argc, char *argv[])
 		}
 	}
 	sft_freefont(font);
+	unmap_file(font_data, font_data_size);
 	return 0;
 }
 
