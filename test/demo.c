@@ -13,7 +13,7 @@
 #include <stdint.h>
 #include <inttypes.h>
 
-#include "schrift.h"
+#include "../schrift.h"
 
 static int utf8_to_utf32(const uint8_t *utf8, uint32_t *utf32, int max)
 {
@@ -139,11 +139,11 @@ int main()
 		.yScale = 32,
 		.flags  = SFT_DOWNWARD_Y,
 	};
-	sft.font = sft_loadfile("resources/FiraGO-Regular_extended_with_NotoSansEgyptianHieroglyphs-Regular.ttf");
+	sft.font = sft_loadfile("./FiraGO-Regular_extended_with_NotoSansEgyptianHieroglyphs-Regular.ttf");
 	if (sft.font == NULL)
 		END("TTF load failed");
 
-	FILE *text_file = fopen("resources/test_text.txt", "r");
+	FILE *text_file = fopen("./test_text.txt", "r");
 	if (text_file == NULL)
 		END("Cannot open input text");
 

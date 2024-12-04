@@ -1,6 +1,3 @@
-*.o
-*.d
-*.ppm
-libschrift.a
-/demo
-/stress
+/*.o
+/*.d
+/libschrift.a

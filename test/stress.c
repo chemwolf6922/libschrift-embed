@@ -10,14 +10,14 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "schrift.h"
+#include "../schrift.h"
 
 #define ABORT(msg) do { fprintf(stderr, "%s\n", msg); exit(1); } while (0)
 
 int
 main(int argc, char *argv[])
 {
-	const char *font_file = "resources/FiraGO-Regular_extended_with_NotoSansEgyptianHieroglyphs-Regular.ttf";
+	const char *font_file = "./FiraGO-Regular_extended_with_NotoSansEgyptianHieroglyphs-Regular.ttf";
 	double size = 20.0;
 
 	int opt = 0;

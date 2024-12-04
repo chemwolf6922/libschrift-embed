@@ -14,35 +14,25 @@ override CFLAGS+=-std=c99 -pedantic -Wall -Wextra -Wconversion -MMD -MP
 LIB=libschrift.a
 LIB_SRC=schrift.c
 
-DEMO=demo
-DEMO_SRC=demo.c
+.PHONY: all lib test clean
 
-STRESS=stress
-STRESS_SRC=stress.c
+all: lib test
 
-.PHONY: all clean
+lib: $(LIB)
 
-all: $(LIB) $(DEMO) $(STRESS)
+test: lib
+	$(MAKE) -C test
 
 $(LIB): $(LIB_SRC:.c=.o)
 	$(AR) rc $@ $^
 	$(RANLIB) $@
 
-demo: $(DEMO_SRC:.c=.o) $(LIB)
-	$(CC) $(LDFLAGS) -o $@ $^ -lm
-
-stress: $(STRESS_SRC:.c=.o) $(LIB)
-	$(CC) $(LDFLAGS) -o $@ $^ -lm
-
 %.o:%.c
 	$(CC) -c $(CFLAGS) -o $@ $<
 
--include $(LIB_SRC:.c=.d) $(DEMO_SRC:.c=.d) $(STRESS_SRC:.c=.d)
+-include $(LIB_SRC:.c=.d)
 
 clean:
-	rm -f *.o
-	rm -f util/*.o
-	rm -f libschrift.a
-	rm -f demo
-	rm -f stress
-
+	rm -f *.o *.d
+	rm -f $(LIB)
+	$(MAKE) -C test clean
