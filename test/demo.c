@@ -127,7 +127,7 @@ static int add_glyph(SFT_Image* fb, const SFT *sft, SFT_UChar cp, int* px, int y
 	}
 
 	/** Overlay to frame buffer. */
-	overlay_glyph_to_frame_buffer(fb, &img, *px + (int)(mtx.leftSideBearing + kerning.xShift), y + (int)(mtx.yOffset + kerning.yShift));
+	overlay_glyph_to_frame_buffer(fb, &img, *px + (int)(mtx.leftSideBearing + kerning.xShift), y + (int)((float)mtx.yOffset + kerning.yShift));
 
 	/** Update *px. y should be managed by the caller */
 	*px += (int)(mtx.advanceWidth + kerning.xShift);
