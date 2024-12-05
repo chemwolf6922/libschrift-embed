@@ -19,7 +19,7 @@ int
 main(int argc, char *argv[])
 {
 	const char *font_file = "./FiraGO-Regular_extended_with_NotoSansEgyptianHieroglyphs-Regular.ttf";
-	double size = 20.0;
+	float size = 20.0;
 
 	int opt = 0;
 	while((opt = getopt(argc, argv, "f:s:")) != -1) {
@@ -28,7 +28,7 @@ main(int argc, char *argv[])
 				font_file = optarg;
 				break;
 			case 's':
-				size = atof(optarg);
+				size = (float)atof(optarg);
 				break;
 			default:
 				fprintf(stderr, "usage: %s [-f font file] [-s size in px]\n", argv[0]);
