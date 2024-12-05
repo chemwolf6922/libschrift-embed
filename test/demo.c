@@ -18,42 +18,6 @@
 #include "../schrift.h"
 #include "util.h"
 
-static int utf8_to_utf32(const uint8_t *utf8, uint32_t *utf32, int max)
-{
-	unsigned int c;
-	int i = 0;
-	--max;
-	while (*utf8) {
-		if (i >= max)
-			return 0;
-		if (!(*utf8 & 0x80U)) {
-			utf32[i++] = *utf8++;
-		} else if ((*utf8 & 0xe0U) == 0xc0U) {
-			c = (*utf8++ & 0x1fU) << 6;
-			if ((*utf8 & 0xc0U) != 0x80U) return 0;
-			utf32[i++] = c + (*utf8++ & 0x3fU);
-		} else if ((*utf8 & 0xf0U) == 0xe0U) {
-			c = (*utf8++ & 0x0fU) << 12;
-			if ((*utf8 & 0xc0U) != 0x80U) return 0;
-			c += (*utf8++ & 0x3fU) << 6;
-			if ((*utf8 & 0xc0U) != 0x80U) return 0;
-			utf32[i++] = c + (*utf8++ & 0x3fU);
-		} else if ((*utf8 & 0xf8U) == 0xf0U) {
-			c = (*utf8++ & 0x07U) << 18;
-			if ((*utf8 & 0xc0U) != 0x80U) return 0;
-			c += (*utf8++ & 0x3fU) << 12;
-			if ((*utf8 & 0xc0U) != 0x80U) return 0;
-			c += (*utf8++ & 0x3fU) << 6;
-			if ((*utf8 & 0xc0U) != 0x80U) return 0;
-			c += (*utf8++ & 0x3fU);
-			if ((c & 0xFFFFF800U) == 0xD800U) return 0;
-            utf32[i++] = c;
-		} else return 0;
-	}
-	utf32[i] = 0;
-	return i;
-}
-
 /**
  * @brief Copy glyph to frame buffer. Blank pixels are ignored.
  * 
@@ -117,8 +81,8 @@ static int add_glyph(SFT_Image* fb, const SFT *sft, SFT_UChar cp, int* px, int y
 
 	/** Do kerning if asked and able to */
 	SFT_Kerning kerning = {
-		.xShift = 0,
-		.yShift = 0,
+		.xShift = sft_from_int(0),
+		.yShift = sft_from_int(0),
 	};
 	if (do_kerning && prev_gid_valid)
 	{
@@ -127,10 +91,10 @@ static int add_glyph(SFT_Image* fb, const SFT *sft, SFT_UChar cp, int* px, int y
 	}
 
 	/** Overlay to frame buffer. */
-	overlay_glyph_to_frame_buffer(fb, &img, *px + (int)(mtx.leftSideBearing + kerning.xShift), y + (int)((float)mtx.yOffset + kerning.yShift));
+	overlay_glyph_to_frame_buffer(fb, &img, *px + sft_to_int(mtx.leftSideBearing + kerning.xShift), y + mtx.yOffset + sft_to_int(kerning.yShift));
 
 	/** Update *px. y should be managed by the caller */
-	*px += (int)(mtx.advanceWidth + kerning.xShift);
+	*px += sft_to_int(mtx.advanceWidth + kerning.xShift);
 
 	/** Update previous gid */
 	prev_gid = gid;
@@ -162,8 +126,8 @@ int main()
 		END("Cannot map font file");
 
 	SFT sft = {
-		.xScale = 32,
-		.yScale = 32,
+		.xScale = sft_from_int(32),
+		.yScale = sft_from_int(32),
 		.flags  = SFT_DOWNWARD_Y,
 	};
 	sft.font = sft_loadmem(font_data, font_data_size);
@@ -177,7 +141,7 @@ int main()
 	SFT_LMetrics lmtx;
 	sft_lmetrics(&sft, &lmtx);
 
-	int y = 20 + (int)(lmtx.ascender + lmtx.lineGap);
+	int y = 20 + sft_to_int(lmtx.ascender + lmtx.lineGap);
 	char line[256] = {0};
 	while (fgets(line, sizeof(line), text_file)) {
 		if(line[strlen(line) - 1] == '\n')
@@ -193,7 +157,7 @@ int main()
 			add_glyph(&fb, &sft, codepoints[i], &x, y, i!=0);
 		}
 
-		y += 2 * (int)(lmtx.ascender + lmtx.descender + lmtx.lineGap);
+		y += 2 * sft_to_int(lmtx.ascender + lmtx.descender + lmtx.lineGap);
 	}
 
 	fclose(text_file);

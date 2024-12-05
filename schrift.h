@@ -35,27 +35,42 @@ typedef struct SFT_GMetrics SFT_GMetrics;
 typedef struct SFT_Kerning  SFT_Kerning;
 typedef struct SFT_Image    SFT_Image;
 
+
+/** All the interfaces stay in float to simplify usage */
+
+// #define SFT_USE_FLOAT
+
+#ifdef SFT_USE_FLOAT
+typedef float SFT_Type;
+#else
+#ifndef SFT_FIXED_DECIMAL
+#define SFT_FIXED_DECIMAL (16)
+#endif
+typedef int64_t SFT_Fixed;
+typedef SFT_Fixed SFT_Type;
+#endif
+
 struct SFT
 {
 	SFT_Font *font;
-	float    xScale;
-	float    yScale;
-	float    xOffset;
-	float    yOffset;
+	SFT_Type  xScale;
+	SFT_Type  yScale;
+	SFT_Type  xOffset;
+	SFT_Type  yOffset;
 	int       flags;
 };
 
 struct SFT_LMetrics
 {
-	float ascender;
-	float descender;
-	float lineGap;
+	SFT_Type ascender;
+	SFT_Type descender;
+	SFT_Type lineGap;
 };
 
 struct SFT_GMetrics
 {
-	float advanceWidth;
-	float leftSideBearing;
+	SFT_Type advanceWidth;
+	SFT_Type leftSideBearing;
 	int    yOffset;
 	int    minWidth;
 	int    minHeight;
@@ -63,8 +78,8 @@ struct SFT_GMetrics
 
 struct SFT_Kerning
 {
-	float xShift;
-	float yShift;
+	SFT_Type xShift;
+	SFT_Type yShift;
 };
 
 struct SFT_Image
@@ -73,6 +88,42 @@ struct SFT_Image
 	int width;
 	int height;
 };
+
+#ifdef SFT_USE_FLOAT
+inline __attribute__((always_inline)) int sft_to_int(SFT_Type x)
+{
+	return (int) x;
+}
+inline __attribute__((always_inline)) SFT_Type sft_from_int(int x)
+{
+	return (SFT_Type) x;
+}
+inline __attribute__((always_inline)) SFT_Type sft_from_float(float x)
+{
+	return (SFT_Type) x;
+}
+inline __attribute__((always_inline)) SFT_Type sft_to_float(SFT_Type x)
+{
+	return x;
+}
+#else
+inline __attribute__((always_inline)) int sft_to_int(SFT_Type x)
+{
+	return x >> SFT_FIXED_DECIMAL;
+}
+inline __attribute__((always_inline)) SFT_Type sft_from_int(int x)
+{
+	return (SFT_Type) (x << SFT_FIXED_DECIMAL);
+}
+inline __attribute__((always_inline)) SFT_Type sft_from_float(float x)
+{
+	return (SFT_Type) (x * (1 << SFT_FIXED_DECIMAL));
+}
+inline __attribute__((always_inline)) float sft_to_float(SFT_Type x)
+{
+	return (float) x / (1 << SFT_FIXED_DECIMAL);
+}
+#endif
 
 const char *sft_version(void);
 

@@ -1,7 +1,5 @@
 # See LICENSE file for copyright and license details.
 
-.POSIX:
-
 VERSION=0.10.2
 
 CC?=gcc
@@ -10,6 +8,12 @@ RANLIB?=ranlib
 
 CFLAGS?=-Os
 override CFLAGS+=-std=c99 -pedantic -Wall -Wextra -Wconversion -MMD -MP
+ifneq ($(SFT_USE_FLOAT), )
+override CFLAGS+=-DSFT_USE_FLOAT
+endif
+ifneq ($(SFT_DEBUG), )
+override CFLAGS+=-DSFT_DEBUG -g -O0
+endif
 
 LIB=libschrift.a
 LIB_SRC=schrift.c

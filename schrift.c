@@ -63,6 +63,20 @@
 #define STACK_FREE(var) \
 	if (var != var##_stack_) free(var);
 
+/** Debug */
+#ifdef SFT_DEBUG
+#include <stdio.h>
+#define DEBUG_SFT_VALUE(x) fprintf(stdout, "%s " #x " = %f\n", __func__, (double)sft_to_float(x))
+#else
+#define DEBUG_SFT_VALUE(x)
+#endif
+
+#ifdef SFT_DEBUG
+#define SFT_INLINE
+#else
+#define SFT_INLINE inline __attribute__((always_inline))
+#endif
+
 /* structs */
 typedef struct Point   Point;
 typedef struct Line    Line;
@@ -71,10 +85,10 @@ typedef struct Cell    Cell;
 typedef struct Outline Outline;
 typedef struct Raster  Raster;
 
-struct Point { float x, y; };
+struct Point { SFT_Type x, y; };
 struct Line  { uint_least16_t beg, end; };
 struct Curve { uint_least16_t beg, end, ctrl; };
-struct Cell  { float area, cover; };
+struct Cell  { SFT_Type area, cover; };
 
 struct Outline
 {
@@ -109,12 +123,10 @@ struct SFT_Font
 /* function declarations */
 /* generic utility functions */
 static void *reallocarray(void *optr, size_t nmemb, size_t size);
-static inline int fast_floor(float x);
-static inline int fast_ceil (float x);
 static int  init_font (SFT_Font *font);
 /* simple mathematical operations */
 static Point midpoint(Point a, Point b);
-static void transform_points(unsigned int numPts, Point *points, float trf[6]);
+static void transform_points(unsigned int numPts, Point *points, SFT_Type trf[6]);
 static void clip_points(unsigned int numPts, Point *points, int width, int height);
 /* 'outline' data structure management */
 static int  init_outline(Outline *outl);
@@ -159,9 +171,120 @@ static void draw_lines(Outline *outl, Raster buf);
 /* post-processing */
 static void post_process(Raster buf, uint8_t *image);
 /* glyph rendering */
-static int  render_outline(Outline *outl, float transform[6], SFT_Image image);
+static int  render_outline(Outline *outl, SFT_Type transform[6], SFT_Image image);
 
 /* function implementations */
+
+#ifdef SFT_USE_FLOAT
+static SFT_INLINE SFT_Type
+sft_mul(SFT_Type a, SFT_Type b)
+{
+	SFT_Type result = a * b;
+	DEBUG_SFT_VALUE(a);
+	DEBUG_SFT_VALUE(b);
+	DEBUG_SFT_VALUE(result);
+	return result;
+}
+
+static SFT_INLINE SFT_Type
+sft_div(SFT_Type a, SFT_Type b)
+{
+	SFT_Type result = a / b;
+	DEBUG_SFT_VALUE(a);
+	DEBUG_SFT_VALUE(b);
+	DEBUG_SFT_VALUE(result);
+	return result;
+}
+
+static SFT_INLINE int
+sft_floor(SFT_Type x)
+{
+	DEBUG_SFT_VALUE(x);
+	return (int) floorf(x);
+}
+
+static SFT_INLINE int
+sft_ceil(SFT_Type x)
+{
+	DEBUG_SFT_VALUE(x);
+	return (int) ceilf(x);
+}
+
+static SFT_INLINE SFT_Type
+sft_nextafter(SFT_Type x, SFT_Type y)
+{
+	SFT_Type result = nextafterf(x, y);
+	DEBUG_SFT_VALUE(x);
+	DEBUG_SFT_VALUE(y);
+	DEBUG_SFT_VALUE(result);
+	return result;
+}
+
+static SFT_INLINE SFT_Type
+sft_abs(SFT_Type x)
+{
+	SFT_Type result = fabsf(x);
+	DEBUG_SFT_VALUE(x);
+	DEBUG_SFT_VALUE(result);
+	return result;
+}
+#else
+/** Fixed arithmetic */
+static SFT_INLINE SFT_Type
+sft_mul(SFT_Type a, SFT_Type b)
+{
+	SFT_Type result = (a * b + (1 << (SFT_FIXED_DECIMAL-1))) >> SFT_FIXED_DECIMAL;
+	DEBUG_SFT_VALUE(a);
+	DEBUG_SFT_VALUE(b);
+	DEBUG_SFT_VALUE(result);
+	return result;
+}
+
+static SFT_INLINE SFT_Type
+sft_div(SFT_Type a, SFT_Type b)
+{
+	SFT_Type result = (a << SFT_FIXED_DECIMAL) / b;
+	DEBUG_SFT_VALUE(a);
+	DEBUG_SFT_VALUE(b);
+	DEBUG_SFT_VALUE(result);
+	return result;
+}
+
+static SFT_INLINE int
+sft_floor(SFT_Type x)
+{
+	DEBUG_SFT_VALUE(x);
+	return  x >> SFT_FIXED_DECIMAL;
+}
+
+static SFT_INLINE int
+sft_ceil(SFT_Type x)
+{
+	DEBUG_SFT_VALUE(x);
+	return (x + (1 << SFT_FIXED_DECIMAL) - 1) >> SFT_FIXED_DECIMAL;
+}
+
+static SFT_INLINE SFT_Type
+sft_nextafter(SFT_Type x, SFT_Type y)
+{
+	SFT_Type result = (x < y) ? x + 1:
+			(x > y) ? x - 1:
+			x;
+	DEBUG_SFT_VALUE(x);
+	DEBUG_SFT_VALUE(y);
+	DEBUG_SFT_VALUE(result);
+	return result;
+}
+
+static SFT_INLINE SFT_Type
+sft_abs(SFT_Type x)
+{
+	SFT_Type result = x < 0 ? -x : x;
+	DEBUG_SFT_VALUE(x);
+	DEBUG_SFT_VALUE(result);
+	return result;
+}
+#endif
 
 const char *
 sft_version(void)
@@ -199,17 +322,17 @@ sft_freefont(SFT_Font *font)
 int
 sft_lmetrics(const SFT *sft, SFT_LMetrics *metrics)
 {
-	float factor;
+	SFT_Type factor;
 	uint_fast32_t hhea;
 	memset(metrics, 0, sizeof *metrics);
 	if (gettable(sft->font, "hhea", &hhea) < 0)
 		return -1;
 	if (!is_safe_offset(sft->font, hhea, 36))
 		return -1;
-	factor = sft->yScale / sft->font->unitsPerEm;
-	metrics->ascender  = geti16(sft->font, hhea + 4) * factor;
-	metrics->descender = geti16(sft->font, hhea + 6) * factor;
-	metrics->lineGap   = geti16(sft->font, hhea + 8) * factor;
+	factor = sft_div(sft->yScale, sft_from_int(sft->font->unitsPerEm));
+	metrics->ascender  = sft_mul(sft_from_int(geti16(sft->font, hhea + 4)), factor);
+	metrics->descender = sft_mul(sft_from_int(geti16(sft->font, hhea + 6)), factor);
+	metrics->lineGap   = sft_mul(sft_from_int(geti16(sft->font, hhea + 8)), factor);
 	return 0;
 }
 
@@ -224,7 +347,7 @@ int
 sft_gmetrics(const SFT *sft, SFT_Glyph glyph, SFT_GMetrics *metrics)
 {
 	int adv, lsb;
-	float xScale = sft->xScale / sft->font->unitsPerEm;
+	SFT_Type xScale = sft_div(sft->xScale, sft_from_int(sft->font->unitsPerEm));
 	uint_fast32_t outline;
 	int bbox[4];
 
@@ -232,8 +355,8 @@ sft_gmetrics(const SFT *sft, SFT_Glyph glyph, SFT_GMetrics *metrics)
 
 	if (hor_metrics(sft->font, glyph, &adv, &lsb) < 0)
 		return -1;
-	metrics->advanceWidth    = (float)adv * xScale;
-	metrics->leftSideBearing = (float)lsb * xScale + sft->xOffset;
+	metrics->advanceWidth    = sft_mul(sft_from_int(adv), xScale);
+	metrics->leftSideBearing = sft_mul(sft_from_int(lsb), xScale) + sft->xOffset;
 
 	if (outline_offset(sft->font, glyph, &outline) < 0)
 		return -1;
@@ -296,9 +419,9 @@ sft_kerning(const SFT *sft, SFT_Glyph leftGlyph, SFT_Glyph rightGlyph,
 				
 				value = geti16(sft->font, (uint_fast32_t) ((uint8_t *) match - sft->font->memory + 4));
 				if (flags & CROSS_STREAM_KERNING) {
-					kerning->yShift += (float)value;
+					kerning->yShift += sft_from_int(value);
 				} else {
-					kerning->xShift += (float)value;
+					kerning->xShift += sft_from_int(value);
 				}
 			}
 
@@ -308,8 +431,8 @@ sft_kerning(const SFT *sft, SFT_Glyph leftGlyph, SFT_Glyph rightGlyph,
 		--numTables;
 	}
 
-	kerning->xShift = kerning->xShift / sft->font->unitsPerEm * sft->xScale;
-	kerning->yShift = kerning->yShift / sft->font->unitsPerEm * sft->yScale;
+	kerning->xShift = sft_mul(sft_div(kerning->xShift, sft_from_int(sft->font->unitsPerEm)),  sft->xScale);
+	kerning->yShift = sft_mul(sft_div(kerning->yShift, sft_from_int(sft->font->unitsPerEm)),  sft->yScale);
 
 	return 0;
 }
@@ -318,7 +441,7 @@ int
 sft_render(const SFT *sft, SFT_Glyph glyph, SFT_Image image)
 {
 	uint_fast32_t outline;
-	float transform[6];
+	SFT_Type transform[6];
 	int bbox[4];
 	Outline outl;
 
@@ -331,16 +454,16 @@ sft_render(const SFT *sft, SFT_Glyph glyph, SFT_Image image)
 	/* Set up the transformation matrix such that
 	 * the transformed bounding boxes min corner lines
 	 * up with the (0, 0) point. */
-	transform[0] = sft->xScale / sft->font->unitsPerEm;
-	transform[1] = 0.0;
-	transform[2] = 0.0;
-	transform[4] = sft->xOffset - (float)bbox[0];
+	transform[0] = sft_div(sft->xScale, sft_from_int(sft->font->unitsPerEm));
+	transform[1] = sft_from_float(0.0);
+	transform[2] = sft_from_float(0.0);
+	transform[4] = sft->xOffset - sft_from_int(bbox[0]);
 	if (sft->flags & SFT_DOWNWARD_Y) {
-		transform[3] = -sft->yScale / sft->font->unitsPerEm;
-		transform[5] = (float)bbox[3] - sft->yOffset;
+		transform[3] = -sft_div(sft->yScale, sft_from_int(sft->font->unitsPerEm));
+		transform[5] = sft_from_int(bbox[3]) - sft->yOffset;
 	} else {
-		transform[3] = +sft->yScale / sft->font->unitsPerEm;
-		transform[5] = sft->yOffset - (float)bbox[1];
+		transform[3] = +sft_div(sft->yScale, sft_from_int(sft->font->unitsPerEm));
+		transform[5] = sft->yOffset - sft_from_int(bbox[1]);
 	}
 	
 	memset(&outl, 0, sizeof outl);
@@ -378,22 +501,6 @@ reallocarray(void *optr, size_t nmemb, size_t size)
 	return realloc(optr, size * nmemb);
 }
 
-/* TODO maybe we should use long here instead of int. */
-static inline int
-fast_floor(float x)
-{
-	int i = (int) x;
-	return i - (i > x);
-}
-
-static inline int
-fast_ceil(float x)
-{
-	int i = (int) x;
-	return i + (i < x);
-}
-
-
 static int
 init_font(SFT_Font *font)
 {
@@ -426,22 +533,22 @@ static Point
 midpoint(Point a, Point b)
 {
 	return (Point) {
-		0.5f * (a.x + b.x),
-		0.5f * (a.y + b.y)
+	    sft_mul(sft_from_float(0.5), (a.x + b.x)),
+		sft_mul(sft_from_float(0.5), (a.y + b.y))
 	};
 }
 
 /* Applies an affine linear transformation matrix to a set of points. */
 static void
-transform_points(unsigned int numPts, Point *points, float trf[6])
+transform_points(unsigned int numPts, Point *points, SFT_Type trf[6])
 {
 	Point pt;
 	unsigned int i;
 	for (i = 0; i < numPts; ++i) {
 		pt = points[i];
 		points[i] = (Point) {
-			pt.x * trf[0] + pt.y * trf[2] + trf[4],
-			pt.x * trf[1] + pt.y * trf[3] + trf[5]
+			sft_mul(pt.x, trf[0]) + sft_mul(pt.y, trf[2]) + trf[4],
+			sft_mul(pt.x, trf[1]) + sft_mul(pt.y, trf[3]) + trf[5]
 		};
 	}
 }
@@ -455,17 +562,17 @@ clip_points(unsigned int numPts, Point *points, int width, int height)
 	for (i = 0; i < numPts; ++i) {
 		pt = points[i];
 
-		if (pt.x < 0.0) {
-			points[i].x = 0.0;
+		if (pt.x < sft_from_int(0)) {
+			points[i].x = sft_from_float(0.0);
 		}
-		if (pt.x >= width) {
-			points[i].x = nextafterf((float)width, 0.0);
+		if (pt.x >= sft_from_int(width)) {
+			points[i].x = sft_nextafter(sft_from_int(width), sft_from_float(0.0));
 		}
-		if (pt.y < 0.0) {
-			points[i].y = 0.0;
+		if (pt.y < sft_from_int(0)) {
+			points[i].y = sft_from_float(0.0);
 		}
-		if (pt.y >= height) {
-			points[i].y = nextafterf((float)height, 0.0);
+		if (pt.y >= sft_from_int(height)) {
+			points[i].y = sft_nextafter(sft_from_int(height), sft_from_float(0.0));
 		}
 	}
 }
@@ -854,7 +961,7 @@ hor_metrics(SFT_Font *font, SFT_Glyph glyph, int *advanceWidth, int *leftSideBea
 static int
 glyph_bbox(const SFT *sft, uint_fast32_t outline, int box[4])
 {
-	float xScale, yScale;
+	SFT_Type xScale, yScale;
 	/* Read the bounding box from the font file verbatim. */
 	if (!is_safe_offset(sft->font, outline, 10))
 		return -1;
@@ -865,12 +972,12 @@ glyph_bbox(const SFT *sft, uint_fast32_t outline, int box[4])
 	if (box[2] <= box[0] || box[3] <= box[1])
 		return -1;
 	/* Transform the bounding box into SFT coordinate space. */
-	xScale = sft->xScale / sft->font->unitsPerEm;
-	yScale = sft->yScale / sft->font->unitsPerEm;
-	box[0] = (int) floor((float)box[0] * xScale + sft->xOffset);
-	box[1] = (int) floor((float)box[1] * yScale + sft->yOffset);
-	box[2] = (int) ceil ((float)box[2] * xScale + sft->xOffset);
-	box[3] = (int) ceil ((float)box[3] * yScale + sft->yOffset);
+	xScale = sft_div(sft->xScale, sft_from_int(sft->font->unitsPerEm));
+	yScale = sft_div(sft->yScale, sft_from_int(sft->font->unitsPerEm));
+	box[0] = sft_floor(sft_mul(sft_from_int(box[0]), xScale) + sft->xOffset);
+	box[1] = sft_floor(sft_mul(sft_from_int(box[1]), yScale) + sft->yOffset);
+	box[2] = sft_ceil (sft_mul(sft_from_int(box[2]), xScale) + sft->xOffset);
+	box[3] = sft_ceil (sft_mul(sft_from_int(box[3]), yScale) + sft->yOffset);
 	return 0;
 }
 
@@ -938,15 +1045,15 @@ simple_flags(SFT_Font *font, uint_fast32_t *offset, uint_fast16_t numPts, uint8_
 static int
 simple_points(SFT_Font *font, uint_fast32_t offset, uint_fast16_t numPts, uint8_t *flags, Point *points)
 {
-	long accum, value, bit;
+	int accum, value, bit;
 	uint_fast16_t i;
 
-	accum = 0L;
+	accum = 0;
 	for (i = 0; i < numPts; ++i) {
 		if (flags[i] & X_CHANGE_IS_SMALL) {
 			if (!is_safe_offset(font, offset, 1))
 				return -1;
-			value = (long) getu8(font, offset++);
+			value = (int)getu8(font, offset++);
 			bit = !!(flags[i] & X_CHANGE_IS_POSITIVE);
 			accum -= (value ^ -bit) + bit;
 		} else if (!(flags[i] & X_CHANGE_IS_ZERO)) {
@@ -955,15 +1062,15 @@ simple_points(SFT_Font *font, uint_fast32_t offset, uint_fast16_t numPts, uint8_
 			accum += geti16(font, offset);
 			offset += 2;
 		}
-		points[i].x = (float) accum;
+		points[i].x = sft_from_int(accum);
 	}
 
-	accum = 0L;
+	accum = 0;
 	for (i = 0; i < numPts; ++i) {
 		if (flags[i] & Y_CHANGE_IS_SMALL) {
 			if (!is_safe_offset(font, offset, 1))
 				return -1;
-			value = (long) getu8(font, offset++);
+			value = (int) getu8(font, offset++);
 			bit = !!(flags[i] & Y_CHANGE_IS_POSITIVE);
 			accum -= (value ^ -bit) + bit;
 		} else if (!(flags[i] & Y_CHANGE_IS_ZERO)) {
@@ -972,7 +1079,7 @@ simple_points(SFT_Font *font, uint_fast32_t offset, uint_fast16_t numPts, uint8_
 			accum += geti16(font, offset);
 			offset += 2;
 		}
-		points[i].y = (float) accum;
+		points[i].y = sft_from_int((int)accum);
 	}
 
 	return 0;
@@ -1130,7 +1237,7 @@ failure:
 static int
 compound_outline(SFT_Font *font, uint_fast32_t offset, int recDepth, Outline *outl)
 {
-	float local[6];
+	SFT_Type local[6];
 	uint_fast32_t outline;
 	unsigned int flags, glyph, basePoint;
 	/* Guard against infinite recursion (compound glyphs that have themselves as component). */
@@ -1150,39 +1257,40 @@ compound_outline(SFT_Font *font, uint_fast32_t offset, int recDepth, Outline *ou
 		if (flags & OFFSETS_ARE_LARGE) {
 			if (!is_safe_offset(font, offset, 4))
 				return -1;
-			local[4] = geti16(font, offset);
-			local[5] = geti16(font, offset + 2);
+			local[4] = sft_from_int(geti16(font, offset));
+			local[5] = sft_from_int(geti16(font, offset + 2));
 			offset += 4;
 		} else {
 			if (!is_safe_offset(font, offset, 2))
 				return -1;
-			local[4] = geti8(font, offset);
-			local[5] = geti8(font, offset + 1);
+			local[4] = sft_from_int(geti8(font, offset));
+			local[5] = sft_from_int(geti8(font, offset + 1));
 			offset += 2;
 		}
 		if (flags & GOT_A_SINGLE_SCALE) {
 			if (!is_safe_offset(font, offset, 2))
 				return -1;
-			local[0] = geti16(font, offset) / 16384.0f;
+			/** @todo change this to sft_shift */
+			local[0] =  sft_div(sft_from_int(geti16(font, offset)), sft_from_float(16384.0f));
 			local[3] = local[0];
 			offset += 2;
 		} else if (flags & GOT_AN_X_AND_Y_SCALE) {
 			if (!is_safe_offset(font, offset, 4))
 				return -1;
-			local[0] = geti16(font, offset + 0) / 16384.0f;
-			local[3] = geti16(font, offset + 2) / 16384.0f;
+			local[0] = sft_div(sft_from_int(geti16(font, offset + 0)), sft_from_float(16384.0f));
+			local[3] = sft_div(sft_from_int(geti16(font, offset + 2)), sft_from_float(16384.0f));
 			offset += 4;
 		} else if (flags & GOT_A_SCALE_MATRIX) {
 			if (!is_safe_offset(font, offset, 8))
 				return -1;
-			local[0] = geti16(font, offset + 0) / 16384.0f;
-			local[1] = geti16(font, offset + 2) / 16384.0f;
-			local[2] = geti16(font, offset + 4) / 16384.0f;
-			local[3] = geti16(font, offset + 6) / 16384.0f;
+			local[0] = sft_div(sft_from_int(geti16(font, offset + 0)), sft_from_float(16384.0f));
+			local[1] = sft_div(sft_from_int(geti16(font, offset + 2)), sft_from_float(16384.0f));
+			local[2] = sft_div(sft_from_int(geti16(font, offset + 4)), sft_from_float(16384.0f));
+			local[3] = sft_div(sft_from_int(geti16(font, offset + 6)), sft_from_float(16384.0f));
 			offset += 8;
 		} else {
-			local[0] = 1.0;
-			local[3] = 1.0;
+			local[0] = sft_from_float(1.0);
+			local[3] = sft_from_float(1.0);
 		}
 		/* At this point, Apple's spec more or less tells you to scale the matrix by its own L1 norm.
 		 * But stb_truetype scales by the L2 norm. And FreeType2 doesn't scale at all.
@@ -1223,13 +1331,13 @@ decode_outline(SFT_Font *font, uint_fast32_t offset, int recDepth, Outline *outl
 static int
 is_flat(Outline *outl, Curve curve)
 {
-	const float maxArea2 = 2.0;
+	const SFT_Type maxArea2 = sft_from_float(2.0);
 	Point a = outl->points[curve.beg];
 	Point b = outl->points[curve.ctrl];
 	Point c = outl->points[curve.end];
 	Point g = { b.x-a.x, b.y-a.y };
 	Point h = { c.x-a.x, c.y-a.y };
-	float area2 = fabsf(g.x*h.y-h.x*g.y);
+	SFT_Type area2 = sft_abs(sft_mul(g.x,h.y)-sft_mul(h.x,g.y));
 	return area2 <= maxArea2;
 }
 
@@ -1295,9 +1403,9 @@ draw_line(Raster buf, Point origin, Point goal)
 	Point delta;
 	Point nextCrossing;
 	Point crossingIncr;
-	float halfDeltaX;
-	float prevDistance = 0.0, nextDistance;
-	float xAverage, yDifference;
+	SFT_Type halfDeltaX;
+	SFT_Type prevDistance = sft_from_float(0.0), nextDistance;
+	SFT_Type xAverage, yDifference;
 	struct { int x, y; } pixel;
 	struct { int x, y; } dir;
 	int step, numSteps = 0;
@@ -1312,64 +1420,64 @@ draw_line(Raster buf, Point origin, Point goal)
 		return;
 	}
 	
-	crossingIncr.x = dir.x ? fabsf(1.0f / delta.x) : 1.0f;
-	crossingIncr.y = fabsf(1.0f / delta.y);
+	crossingIncr.x = dir.x ? sft_abs(sft_div(sft_from_int(1), delta.x)) : sft_from_int(1);
+	crossingIncr.y = sft_abs(sft_div(sft_from_int(1), delta.y));
 
 	if (!dir.x) {
-		pixel.x = fast_floor(origin.x);
-		nextCrossing.x = 100.0;
+		pixel.x = sft_floor(origin.x);
+		nextCrossing.x = sft_from_int(100);
 	} else {
 		if (dir.x > 0) {
-			pixel.x = fast_floor(origin.x);
-			nextCrossing.x = (origin.x - (float)pixel.x) * crossingIncr.x;
+			pixel.x = sft_floor(origin.x);
+			nextCrossing.x = sft_mul((origin.x - sft_from_int(pixel.x)), crossingIncr.x);
 			nextCrossing.x = crossingIncr.x - nextCrossing.x;
-			numSteps += fast_ceil(goal.x) - fast_floor(origin.x) - 1;
+			numSteps += sft_ceil(goal.x) - sft_floor(origin.x) - 1;
 		} else {
-			pixel.x = fast_ceil(origin.x) - 1;
-			nextCrossing.x = (origin.x - (float)pixel.x) * crossingIncr.x;
-			numSteps += fast_ceil(origin.x) - fast_floor(goal.x) - 1;
+			pixel.x = sft_ceil(origin.x) - 1;
+			nextCrossing.x = sft_mul((origin.x - sft_from_int(pixel.x)), crossingIncr.x);
+			numSteps += sft_ceil(origin.x) - sft_floor(goal.x) - 1;
 		}
 	}
 
 	if (dir.y > 0) {
-		pixel.y = fast_floor(origin.y);
-		nextCrossing.y = (origin.y - (float)pixel.y) * crossingIncr.y;
+		pixel.y = sft_floor(origin.y);
+		nextCrossing.y = sft_mul((origin.y - sft_from_int(pixel.y)), crossingIncr.y);
 		nextCrossing.y = crossingIncr.y - nextCrossing.y;
-		numSteps += fast_ceil(goal.y) - fast_floor(origin.y) - 1;
+		numSteps += sft_ceil(goal.y) - sft_floor(origin.y) - 1;
 	} else {
-		pixel.y = fast_ceil(origin.y) - 1;
-		nextCrossing.y = (origin.y - (float)pixel.y) * crossingIncr.y;
-		numSteps += fast_ceil(origin.y) - fast_floor(goal.y) - 1;
+		pixel.y = sft_ceil(origin.y) - 1;
+		nextCrossing.y = sft_mul((origin.y - sft_from_int(pixel.y)), crossingIncr.y);
+		numSteps += sft_ceil(origin.y) - sft_floor(goal.y) - 1;
 	}
 
 	nextDistance = MIN(nextCrossing.x, nextCrossing.y);
-	halfDeltaX = 0.5f * delta.x;
+	halfDeltaX = sft_mul(sft_from_float(0.5f), delta.x);
 
 	for (step = 0; step < numSteps; ++step) {
-		xAverage = origin.x + (prevDistance + nextDistance) * halfDeltaX;
-		yDifference = (nextDistance - prevDistance) * delta.y;
+		xAverage = origin.x + sft_mul((prevDistance + nextDistance), halfDeltaX);
+		yDifference = sft_mul((nextDistance - prevDistance), delta.y);
 		cptr = &buf.cells[pixel.y * buf.width + pixel.x];
 		cell = *cptr;
 		cell.cover += yDifference;
-		xAverage -= (float) pixel.x;
-		cell.area += (1.0f - xAverage) * yDifference;
+		xAverage -= sft_from_int(pixel.x);
+		cell.area += sft_mul((sft_from_int(1) - xAverage), yDifference);
 		*cptr = cell;
 		prevDistance = nextDistance;
 		int alongX = nextCrossing.x < nextCrossing.y;
 		pixel.x += alongX ? dir.x : 0;
 		pixel.y += alongX ? 0 : dir.y;
-		nextCrossing.x += alongX ? crossingIncr.x : 0.0f;
-		nextCrossing.y += alongX ? 0.0f : crossingIncr.y;
+		nextCrossing.x += alongX ? crossingIncr.x : sft_from_int(0);
+		nextCrossing.y += alongX ? sft_from_int(0) : crossingIncr.y;
 		nextDistance = MIN(nextCrossing.x, nextCrossing.y);
 	}
 
-	xAverage = origin.x + (prevDistance + 1.0f) * halfDeltaX;
-	yDifference = (1.0f - prevDistance) * delta.y;
+	xAverage = origin.x + sft_mul((prevDistance + sft_from_int(1)), halfDeltaX);
+	yDifference = sft_mul((sft_from_int(1) - prevDistance), delta.y);
 	cptr = &buf.cells[pixel.y * buf.width + pixel.x];
 	cell = *cptr;
 	cell.cover += yDifference;
-	xAverage -= (float) pixel.x;
-	cell.area += (1.0f - xAverage) * yDifference;
+	xAverage -= sft_from_int(pixel.x);
+	cell.area += sft_mul((sft_from_int(1) - xAverage), yDifference);
 	*cptr = cell;
 }
 
@@ -1390,21 +1498,21 @@ static void
 post_process(Raster buf, uint8_t *image)
 {
 	Cell cell;
-	float accum = 0.0, value;
+	SFT_Type accum = sft_from_int(0), value;
 	unsigned int i, num;
 	num = (unsigned int) buf.width * (unsigned int) buf.height;
 	for (i = 0; i < num; ++i) {
 		cell     = buf.cells[i];
-		value    = fabsf(accum + cell.area);
-		value    = MIN(value, 1.0f);
-		value    = value * 255.0f + 0.5f;
-		image[i] = (uint8_t) value;
+		value    = sft_abs(accum + cell.area);
+		value    = MIN(value, sft_from_int(1));
+		value    = sft_mul(value, sft_from_int(255)) + sft_from_float(0.5f);
+		image[i] = (uint8_t) sft_to_int(value);
 		accum   += cell.cover;
 	}
 }
 
 static int
-render_outline(Outline *outl, float transform[6], SFT_Image image)
+render_outline(Outline *outl, SFT_Type transform[6], SFT_Image image)
 {
 	Cell *cells = NULL;
 	Raster buf;

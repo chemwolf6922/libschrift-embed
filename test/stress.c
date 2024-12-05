@@ -48,8 +48,8 @@ main(int argc, char *argv[])
 	SFT sft;
 	memset(&sft, 0, sizeof sft);
 	sft.font = font;
-	sft.xScale = size;
-	sft.yScale = size;
+	sft.xScale = sft_from_float(size);
+	sft.yScale = sft_from_float(size);
 	sft.flags = SFT_DOWNWARD_Y;
 
 	for (int i = 0; i < 5000; ++i) {
